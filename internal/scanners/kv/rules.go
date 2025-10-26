@@ -63,5 +63,18 @@ func (a *KeyVaultScanner) GetRecommendations() map[string]models.AzqrRecommendat
 			},
 			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-resources?tabs=json",
 		},
+		"kv-008": {
+			RecommendationID: "kv-008",
+			ResourceType:     "Microsoft.KeyVault/vaults",
+			Category:         models.CategorySecurity,
+			Recommendation:   "Key Vault should have private endpoints enabled",
+			Impact:           models.ImpactHigh,
+			Eval: func(target interface{}, scanContext *models.ScanContext) (bool, string) {
+				a := target.(*armkeyvault.Vault)
+				pe := len(a.Properties.PrivateEndpointConnections) > 0
+				return !pe, ""
+			},
+			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/key-vault/general/private-endpoint",
+		},
 	}
 }

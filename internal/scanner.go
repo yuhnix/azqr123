@@ -88,7 +88,7 @@ import (
 	_ "github.com/Azure/azqr/internal/scanners/traf"
 	_ "github.com/Azure/azqr/internal/scanners/vdpool"
 	_ "github.com/Azure/azqr/internal/scanners/vgw"
-	_ "github.com/Azure/azqr/internal/scanners/vm"
+	"github.com/Azure/azqr/internal/scanners/vm"
 	_ "github.com/Azure/azqr/internal/scanners/vmss"
 	_ "github.com/Azure/azqr/internal/scanners/vnet"
 	_ "github.com/Azure/azqr/internal/scanners/vwan"
@@ -103,6 +103,7 @@ type (
 		OutputName             string
 		Defender               bool
 		Advisor                bool
+		VirtualMachines        bool
 		Arc                    bool
 		Xlsx                   bool
 		Cost                   bool
@@ -137,6 +138,16 @@ func NewScanParams() *ScanParams {
 		Filters:                models.NewFilters(),
 		UseAzqrRecommendations: true,
 		UseAprlRecommendations: true,
+	}
+}
+
+func collectVMResults(scanners []models.IAzureScanner, reportData *renderers.ReportData) {
+	for _, scanner := range scanners {
+		if vmScanner, ok := scanner.(*vm.VirtualMachineScanner); ok {
+			vmResults := vmScanner.GetVMResults()
+			reportData.VirtualMachines = append(reportData.VirtualMachines, vmResults...)
+			break // Assuming only one VM scanner per scan
+		}
 	}
 }
 
@@ -351,6 +362,7 @@ func (sc Scanner) Scan(params *ScanParams) string {
 					reportData.Azqr = append(reportData.Azqr, r)
 				}
 			}
+			collectVMResults(filteredServiceScanners, &reportData)
 		}
 
 		// scan costs
