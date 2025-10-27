@@ -26,6 +26,7 @@ type (
 		Resources               []*models.Resource
 		ExludedResources        []*models.Resource
 		ResourceTypeCount       []models.ResourceTypeCount
+		VirtualMachines         []models.VMResult
 	}
 
 	ResourceTypeCountResults struct {
@@ -303,6 +304,35 @@ func (rd *ReportData) ResourceTypesTable() [][]string {
 		rows = append(rows, row)
 	}
 
+	rows = append([][]string{headers}, rows...)
+	return rows
+}
+
+func (rd *ReportData) VirtualMachinesTable() [][]string {
+	headers := []string{"Subscription Id", "Resource Name", "Resource Group", "Resource Id", "Location", "OS Type", "Image Publisher", "Image Offer", "Image Plan", "SKU", "Is SQL VM", "Has Public IP", "AvailabilitySet", "Encryption At Host", "ADE Enabled", "ADE Provisioning State", "Disk SSE Type"}
+	rows := [][]string{}
+	for _, d := range rd.VirtualMachines {
+		row := []string{
+			MaskSubscriptionID(d.SubscriptionID, rd.Mask),
+			d.ResourceName,
+			d.ResourceGroup,
+			d.ResourceID,
+			d.Location,
+			d.OsType,
+			d.ImagePublisher,
+			d.ImageOffer,
+			d.ImagePlan,
+			d.SKU,
+			fmt.Sprintf("%v", d.IsSQLVM),
+			d.PublicIP,
+			fmt.Sprintf("%v", d.AvailabilitySet),
+			fmt.Sprintf("%v", d.EncryptionAtHost),
+			fmt.Sprintf("%v", d.ADEEnabled),
+			d.ADEProvisioning,
+			d.DiskSSEType,
+		}
+		rows = append(rows, row)
+	}
 	rows = append([][]string{headers}, rows...)
 	return rows
 }

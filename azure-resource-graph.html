@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Resource Graph Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0078d4 0%, #005a9e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #0078d4;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            border: 2px solid #dee2e6;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .filter-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .filter-btn.active {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .file-upload {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .upload-btn {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .upload-btn:hover {
+            background: #218838;
+        }
+
+        .stats {
+            padding: 20px 30px;
+            background: white;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 150px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #0078d4;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .graph-container {
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        .node {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .node circle {
+            stroke-width: 2px;
+            transition: all 0.3s;
+        }
+
+        .node:hover circle {
+            stroke-width: 4px;
+            filter: brightness(1.1);
+        }
+
+        .node text {
+            font-size: 14px;
+            font-family: 'Segoe UI', sans-serif;
+            pointer-events: none;
+        }
+
+        .link {
+            fill: none;
+            stroke: #dee2e6;
+            stroke-width: 2px;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 14px;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            line-height: 1.6;
+        }
+
+        .tooltip-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 5px;
+        }
+
+        .tooltip-item {
+            margin: 5px 0;
+        }
+
+        .tooltip-label {
+            color: #adb5bd;
+            font-size: 12px;
+        }
+
+        .impact-high {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .impact-medium {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .impact-low {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .legend {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #333;
+        }
+
+        .placeholder {
+            text-align: center;
+            padding: 100px 30px;
+            color: #6c757d;
+        }
+
+        .placeholder h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .placeholder p {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Azure Resource Graph Visualizer</h1>
+            <p>Interactieve hierarchie van subscriptions, resource groups, resources en recommendations</p>
+        </div>
+
+        <div class="controls">
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    📁 Upload JSON
+                </button>
+                <span id="fileName" style="color: #6c757d; font-size: 14px;"></span>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔎 Zoek op resource naam, type of recommendation...">
+            </div>
+            <div class="filter-group">
+                <span style="font-weight: 600; color: #6c757d;">Impact:</span>
+                <button class="filter-btn active" data-impact="all">Alle</button>
+                <button class="filter-btn" data-impact="High">High</button>
+                <button class="filter-btn" data-impact="Medium">Medium</button>
+                <button class="filter-btn" data-impact="Low">Low</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalSubscriptions">0</div>
+                <div class="stat-label">Subscriptions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalResourceGroups">0</div>
+                <div class="stat-label">Resource Groups</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalResources">0</div>
+                <div class="stat-label">Resources</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalRecommendations">0</div>
+                <div class="stat-label">Recommendations</div>
+            </div>
+        </div>
+
+        <div class="graph-container" id="graphContainer">
+            <div class="placeholder">
+                <h2>👋 Welkom!</h2>
+                <p>Upload je Azure JSON bestand om de interactieve graph te zien</p>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    📁 Klik hier om te uploaden
+                </button>
+            </div>
+        </div>
+
+        <div class="legend" style="display: none;" id="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #0078d4;"></div>
+                <span>Subscription</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #00bcf2;"></div>
+                <span>Resource Group</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #50e6ff;"></div>
+                <span>Resource</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #dc3545;"></div>
+                <span>High Impact</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffc107;"></div>
+                <span>Medium Impact</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #28a745;"></div>
+                <span>Low Impact</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        let rawData = null;
+        let currentFilter = 'all';
+        let searchTerm = '';
+
+        // File upload handler
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = `Laden: ${file.name}...`;
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        window.loadAzureData(data);
+                        document.getElementById('fileName').textContent = `✓ ${file.name}`;
+                    } catch (error) {
+                        alert('Fout bij het laden van de JSON: ' + error.message);
+                        document.getElementById('fileName').textContent = '';
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Functie om resource ID te parsen
+        function parseResourceId(resourceId) {
+            if (!resourceId) return null;
+            const parts = resourceId.toLowerCase().split('/');
+            const subIndex = parts.indexOf('subscriptions');
+            const rgIndex = parts.indexOf('resourcegroups');
+            
+            return {
+                subscription: subIndex >= 0 && parts[subIndex + 1] ? parts[subIndex + 1] : null,
+                resourceGroup: rgIndex >= 0 && parts[rgIndex + 1] ? parts[rgIndex + 1] : null
+            };
+        }
+
+        // Bouw hierarchie
+        function buildHierarchy(data) {
+            const hierarchy = {
+                name: "Azure",
+                type: "root",
+                children: []
+            };
+
+            const subscriptions = new Map();
+            const allRecommendations = [];
+
+            // Verzamel alle recommendations uit verschillende bronnen
+            if (data.advisor) {
+                data.advisor.forEach(item => {
+                    allRecommendations.push({
+                        ...item,
+                        source: 'advisor'
+                    });
+                });
+            }
+
+            if (data.impacted) {
+                data.impacted.forEach(item => {
+                    allRecommendations.push({
+                        ...item,
+                        source: 'impacted'
+                    });
+                });
+            }
+
+            // Filter op impact als nodig
+            let filteredRecommendations = allRecommendations;
+            if (currentFilter !== 'all') {
+                filteredRecommendations = allRecommendations.filter(r => r.impact === currentFilter);
+            }
+
+            // Filter op zoekterm
+            if (searchTerm) {
+                filteredRecommendations = filteredRecommendations.filter(r => {
+                    const searchLower = searchTerm.toLowerCase();
+                    return (r.resourceName && r.resourceName.toLowerCase().includes(searchLower)) ||
+                           (r.resourceType && r.resourceType.toLowerCase().includes(searchLower)) ||
+                           (r.description && r.description.toLowerCase().includes(searchLower));
+                });
+            }
+
+            // Groepeer per subscription → resource group → resource
+            filteredRecommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (!parsed || !parsed.subscription) return;
+
+                const subId = parsed.subscription;
+                const rgName = parsed.resourceGroup || 'unknown';
+                const resourceName = rec.resourceName || 'unknown';
+
+                // Subscription
+                if (!subscriptions.has(subId)) {
+                    subscriptions.set(subId, {
+                        name: rec.subscriptionName || subId,
+                        id: subId,
+                        type: 'subscription',
+                        resourceGroups: new Map()
+                    });
+                }
+
+                const sub = subscriptions.get(subId);
+
+                // Resource Group
+                if (!sub.resourceGroups.has(rgName)) {
+                    sub.resourceGroups.set(rgName, {
+                        name: rgName,
+                        type: 'resourceGroup',
+                        resources: new Map()
+                    });
+                }
+
+                const rg = sub.resourceGroups.get(rgName);
+
+                // Resource
+                if (!rg.resources.has(resourceName)) {
+                    rg.resources.set(resourceName, {
+                        name: resourceName,
+                        type: 'resource',
+                        resourceType: rec.resourceType,
+                        resourceId: rec.resourceId,
+                        recommendations: []
+                    });
+                }
+
+                const resource = rg.resources.get(resourceName);
+
+                // Recommendation
+                resource.recommendations.push({
+                    name: rec.description || rec.recommendation || 'No description',
+                    type: 'recommendation',
+                    impact: rec.impact,
+                    category: rec.category,
+                    recommendationId: rec.recommendationId,
+                    description: rec.description
+                });
+            });
+
+            // Converteer naar hierarchie structuur
+            subscriptions.forEach(sub => {
+                const subNode = {
+                    name: sub.name,
+                    type: 'subscription',
+                    children: []
+                };
+
+                sub.resourceGroups.forEach(rg => {
+                    const rgNode = {
+                        name: rg.name,
+                        type: 'resourceGroup',
+                        children: []
+                    };
+
+                    rg.resources.forEach(resource => {
+                        const resourceNode = {
+                            name: resource.name,
+                            type: 'resource',
+                            resourceType: resource.resourceType,
+                            resourceId: resource.resourceId,
+                            children: resource.recommendations.map(rec => ({
+                                ...rec,
+                                type: 'recommendation'
+                            }))
+                        };
+
+                        if (resourceNode.children.length > 0) {
+                            rgNode.children.push(resourceNode);
+                        }
+                    });
+
+                    if (rgNode.children.length > 0) {
+                        subNode.children.push(rgNode);
+                    }
+                });
+
+                if (subNode.children.length > 0) {
+                    hierarchy.children.push(subNode);
+                }
+            });
+
+            return hierarchy;
+        }
+
+        // Update statistieken
+        function updateStats(data) {
+            const subscriptions = new Set();
+            const resourceGroups = new Set();
+            const resources = new Set();
+            let recommendations = 0;
+
+            const allRecommendations = [...(data.advisor || []), ...(data.impacted || [])];
+
+            allRecommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (parsed && parsed.subscription) {
+                    subscriptions.add(parsed.subscription);
+                    if (parsed.resourceGroup) {
+                        resourceGroups.add(`${parsed.subscription}/${parsed.resourceGroup}`);
+                    }
+                }
+                if (rec.resourceName) {
+                    resources.add(rec.resourceId);
+                }
+                recommendations++;
+            });
+
+            document.getElementById('totalSubscriptions').textContent = subscriptions.size;
+            document.getElementById('totalResourceGroups').textContent = resourceGroups.size;
+            document.getElementById('totalResources').textContent = resources.size;
+            document.getElementById('totalRecommendations').textContent = recommendations;
+        }
+
+        // Teken de graph
+        function drawGraph(hierarchyData) {
+            const container = document.getElementById('graphContainer');
+            container.innerHTML = '<svg id="graph"></svg>';
+            
+            const width = container.clientWidth;
+            const height = 1200;
+
+            const svg = d3.select('#graph')
+                .attr('width', width)
+                .attr('height', height);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(80,${height / 2})`);
+
+            const tree = d3.tree()
+                .size([height - 200, width - 300])
+                .separation((a, b) => (a.parent === b.parent ? 1 : 1.2));
+
+            const root = d3.hierarchy(hierarchyData);
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+            // Klap alles dicht behalve de eerste laag
+            if (root.children) {
+                root.children.forEach(collapse);
+            }
+
+            update(root);
+
+            function collapse(d) {
+                if (d.children) {
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                    d.children = null;
+                }
+            }
+
+            let i = 0;
+
+            function update(source) {
+                const treeData = tree(root);
+                const nodes = treeData.descendants();
+                const links = treeData.descendants().slice(1);
+
+                nodes.forEach(d => d.y = d.depth * 250);
+
+                // Nodes
+                const node = g.selectAll('g.node')
+                    .data(nodes, d => d.id || (d.id = ++i));
+
+                const nodeEnter = node.enter().append('g')
+                    .attr('class', 'node')
+                    .attr('transform', d => `translate(${source.y0},${source.x0})`)
+                    .on('click', click)
+                    .on('mouseover', showTooltip)
+                    .on('mouseout', hideTooltip);
+
+                nodeEnter.append('circle')
+                    .attr('r', 8)
+                    .style('fill', d => getNodeColor(d.data))
+                    .style('stroke', '#333');
+
+                nodeEnter.append('text')
+                    .attr('dy', '.35em')
+                    .attr('x', d => d.children || d._children ? -13 : 13)
+                    .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+                    .text(d => {
+                        const maxLength = 40;
+                        return d.data.name.length > maxLength ? 
+                            d.data.name.substring(0, maxLength) + '...' : 
+                            d.data.name;
+                    });
+
+                const nodeUpdate = nodeEnter.merge(node);
+
+                nodeUpdate.transition()
+                    .duration(750)
+                    .attr('transform', d => `translate(${d.y},${d.x})`);
+
+                nodeUpdate.select('circle')
+                    .style('fill', d => getNodeColor(d.data))
+                    .attr('r', 8);
+
+                const nodeExit = node.exit().transition()
+                    .duration(750)
+                    .attr('transform', d => `translate(${source.y},${source.x})`)
+                    .remove();
+
+                nodeExit.select('circle')
+                    .attr('r', 1e-6);
+
+                nodeExit.select('text')
+                    .style('fill-opacity', 1e-6);
+
+                // Links
+                const link = g.selectAll('path.link')
+                    .data(links, d => d.id);
+
+                const linkEnter = link.enter().insert('path', 'g')
+                    .attr('class', 'link')
+                    .attr('d', d => {
+                        const o = {x: source.x0, y: source.y0};
+                        return diagonal(o, o);
+                    });
+
+                const linkUpdate = linkEnter.merge(link);
+
+                linkUpdate.transition()
+                    .duration(750)
+                    .attr('d', d => diagonal(d, d.parent));
+
+                link.exit().transition()
+                    .duration(750)
+                    .attr('d', d => {
+                        const o = {x: source.x, y: source.y};
+                        return diagonal(o, o);
+                    })
+                    .remove();
+
+                nodes.forEach(d => {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+
+                function diagonal(s, d) {
+                    return `M ${s.y} ${s.x}
+                            C ${(s.y + d.y) / 2} ${s.x},
+                              ${(s.y + d.y) / 2} ${d.x},
+                              ${d.y} ${d.x}`;
+                }
+
+                function click(event, d) {
+                    if (d.children) {
+                        d._children = d.children;
+                        d.children = null;
+                    } else {
+                        d.children = d._children;
+                        d._children = null;
+                    }
+                    update(d);
+                }
+            }
+        }
+
+        function getNodeColor(data) {
+            switch(data.type) {
+                case 'subscription': return '#0078d4';
+                case 'resourceGroup': return '#00bcf2';
+                case 'resource': return '#50e6ff';
+                case 'recommendation':
+                    if (data.impact === 'High') return '#dc3545';
+                    if (data.impact === 'Medium') return '#ffc107';
+                    if (data.impact === 'Low') return '#28a745';
+                    return '#6c757d';
+                default: return '#6c757d';
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById('tooltip');
+            const data = d.data;
+            
+            let content = `<div class="tooltip-title">${data.name}</div>`;
+            
+            if (data.type === 'subscription') {
+                content += `<div class="tooltip-item"><span class="tooltip-label">Type:</span> Subscription</div>`;
+            } else if (data.type === 'resourceGroup') {
+                content += `<div class="tooltip-item"><span class="tooltip-label">Type:</span> Resource Group</div>`;
+            } else if (data.type === 'resource') {
+                content += `<div class="tooltip-item"><span class="tooltip-label">Type:</span> ${data.resourceType || 'Resource'}</div>`;
+                if (data.resourceId) {
+                    content += `<div class="tooltip-item"><span class="tooltip-label">ID:</span> ${data.resourceId}</div>`;
+                }
+            } else if (data.type === 'recommendation') {
+                content += `<div class="tooltip-item"><span class="tooltip-label">Impact:</span> <span class="impact-${data.impact.toLowerCase()}">${data.impact}</span></div>`;
+                if (data.category) {
+                    content += `<div class="tooltip-item"><span class="tooltip-label">Category:</span> ${data.category}</div>`;
+                }
+                if (data.description) {
+                    content += `<div class="tooltip-item" style="margin-top: 10px;">${data.description}</div>`;
+                }
+            }
+            
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.pageX + 15) + 'px';
+            tooltip.style.top = (event.pageY - 15) + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').style.display = 'none';
+        }
+
+        function refresh() {
+            if (!rawData) return;
+            const hierarchy = buildHierarchy(rawData);
+            drawGraph(hierarchy);
+            document.getElementById('legend').style.display = 'flex';
+        }
+
+        // Event listeners
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.impact;
+                refresh();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchTerm = e.target.value;
+            refresh();
+        });
+
+        // Functie om data te laden
+        window.loadAzureData = function(data) {
+            rawData = data;
+            updateStats(data);
+            refresh();
+            console.log('✓ Data geladen! Graph wordt getekend...');
+        };
+    </script>
+</body>
+</html>
