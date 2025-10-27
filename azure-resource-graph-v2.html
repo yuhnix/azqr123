@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Resource Graph Visualizer v2</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            background: white;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0078d4 0%, #005a9e 100%);
+            color: white;
+            padding: 20px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 15px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .file-upload {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .upload-btn {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .upload-btn:hover {
+            background: #218838;
+        }
+
+        .json-selector {
+            padding: 8px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: 2px solid #dee2e6;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .filter-btn.active {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            background: #e9ecef;
+            border-bottom: 2px solid #dee2e6;
+            padding: 0 30px;
+        }
+
+        .nav-tab {
+            padding: 15px 30px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s;
+        }
+
+        .nav-tab:hover {
+            background: rgba(0, 120, 212, 0.1);
+            color: #0078d4;
+        }
+
+        .nav-tab.active {
+            background: white;
+            color: #0078d4;
+            border-bottom-color: #0078d4;
+        }
+
+        .stats {
+            padding: 15px 30px;
+            background: white;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 120px;
+            padding: 15px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .stat-card.active {
+            background: linear-gradient(135deg, #0078d4 0%, #005a9e 100%);
+            color: white;
+        }
+
+        .stat-card.active .stat-number,
+        .stat-card.active .stat-label {
+            color: white;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #0078d4;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .content-area {
+            padding: 20px 30px;
+            overflow: auto;
+            max-height: calc(100vh - 400px);
+            min-height: 500px;
+        }
+
+        .list-view {
+            display: none;
+        }
+
+        .list-view.active {
+            display: block;
+        }
+
+        .list-group {
+            margin-bottom: 20px;
+        }
+
+        .list-group-header {
+            background: #e9ecef;
+            padding: 12px 20px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .list-group-header:hover {
+            background: #dee2e6;
+        }
+
+        .list-group-header .count {
+            background: #0078d4;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }
+
+        .list-group-items {
+            padding-left: 20px;
+            display: none;
+        }
+
+        .list-group-items.expanded {
+            display: block;
+        }
+
+        .list-item {
+            padding: 12px 20px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .list-item:hover {
+            background: #f8f9fa;
+            border-color: #0078d4;
+            transform: translateX(5px);
+        }
+
+        .list-item-title {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 5px;
+        }
+
+        .list-item-meta {
+            font-size: 0.85em;
+            color: #6c757d;
+        }
+
+        .impact-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .impact-high {
+            background: #dc3545;
+            color: white;
+        }
+
+        .impact-medium {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .impact-low {
+            background: #28a745;
+            color: white;
+        }
+
+        .graph-view {
+            display: none;
+            position: relative;
+        }
+
+        .graph-view.active {
+            display: block;
+        }
+
+        .node {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .node circle {
+            stroke-width: 1.5px;
+        }
+
+        .node:hover circle {
+            stroke-width: 3px;
+            filter: brightness(1.1);
+        }
+
+        .node text {
+            font-size: 13px;
+            font-family: 'Segoe UI', sans-serif;
+            pointer-events: none;
+        }
+
+        .link {
+            fill: none;
+            stroke: #dee2e6;
+            stroke-width: 1.5px;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 13px;
+            max-width: 450px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            line-height: 1.8;
+            display: none;
+        }
+
+        .tooltip-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 5px;
+        }
+
+        .placeholder {
+            text-align: center;
+            padding: 60px 30px;
+            color: #6c757d;
+        }
+
+        .placeholder h2 {
+            font-size: 1.8em;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Azure Resource Graph Visualizer v2</h1>
+            <p>Interactieve hierarchie van subscriptions, resource groups, resources en recommendations</p>
+        </div>
+
+        <div class="controls">
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    📁 Upload JSON
+                </button>
+                <span id="fileName" style="color: #6c757d; font-size: 14px;"></span>
+            </div>
+            <select id="jsonSelector" class="json-selector" style="display: none;">
+                <option value="">Selecteer JSON bestand...</option>
+            </select>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔎 Zoek...">
+            </div>
+            <div class="filter-group">
+                <span style="font-weight: 600; color: #6c757d;">Impact:</span>
+                <button class="filter-btn active" data-impact="all">Alle</button>
+                <button class="filter-btn" data-impact="High">High</button>
+                <button class="filter-btn" data-impact="Medium">Medium</button>
+                <button class="filter-btn" data-impact="Low">Low</button>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-view="graph">🌳 Hierarchie</button>
+            <button class="nav-tab" data-view="subscriptions">📊 Subscriptions</button>
+            <button class="nav-tab" data-view="resourcegroups">📁 Resource Groups</button>
+            <button class="nav-tab" data-view="resourcetypes">🔧 Resource Types</button>
+            <button class="nav-tab" data-view="resources">💾 Resources</button>
+            <button class="nav-tab" data-view="recommendations">⚠️ Recommendations</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card" data-view="subscriptions">
+                <div class="stat-number" id="totalSubscriptions">0</div>
+                <div class="stat-label">Subscriptions</div>
+            </div>
+            <div class="stat-card" data-view="resourcegroups">
+                <div class="stat-number" id="totalResourceGroups">0</div>
+                <div class="stat-label">Resource Groups</div>
+            </div>
+            <div class="stat-card" data-view="resourcetypes">
+                <div class="stat-number" id="totalResourceTypes">0</div>
+                <div class="stat-label">Resource Types</div>
+            </div>
+            <div class="stat-card" data-view="resources">
+                <div class="stat-number" id="totalResources">0</div>
+                <div class="stat-label">Resources</div>
+            </div>
+            <div class="stat-card" data-view="recommendations">
+                <div class="stat-number" id="totalRecommendations">0</div>
+                <div class="stat-label">Recommendations</div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <!-- Graph View -->
+            <div id="graphView" class="graph-view active">
+                <div class="placeholder">
+                    <h2>👋 Welkom!</h2>
+                    <p>Upload je Azure JSON bestand om te beginnen</p>
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                        📁 Klik hier om te uploaden
+                    </button>
+                </div>
+            </div>
+
+            <!-- Subscriptions View -->
+            <div id="subscriptionsView" class="list-view"></div>
+
+            <!-- Resource Groups View -->
+            <div id="resourceGroupsView" class="list-view"></div>
+
+            <!-- Resource Types View -->
+            <div id="resourceTypesView" class="list-view"></div>
+
+            <!-- Resources View -->
+            <div id="resourcesView" class="list-view"></div>
+
+            <!-- Recommendations View -->
+            <div id="recommendationsView" class="list-view"></div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        let rawData = null;
+        let currentFilter = 'all';
+        let searchTerm = '';
+        let currentView = 'graph';
+        let loadedFiles = new Map(); // Store loaded JSON files
+
+        // File upload handler
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = `Laden: ${file.name}...`;
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        loadedFiles.set(file.name, data);
+                        updateFileSelector();
+                        loadAzureData(data, file.name);
+                        document.getElementById('fileName').textContent = `✓ ${file.name}`;
+                    } catch (error) {
+                        alert('Fout bij het laden van de JSON: ' + error.message);
+                        document.getElementById('fileName').textContent = '';
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // JSON selector handler
+        document.getElementById('jsonSelector').addEventListener('change', function(e) {
+            const fileName = e.target.value;
+            if (fileName && loadedFiles.has(fileName)) {
+                loadAzureData(loadedFiles.get(fileName), fileName);
+            }
+        });
+
+        function updateFileSelector() {
+            const selector = document.getElementById('jsonSelector');
+            selector.innerHTML = '<option value="">Selecteer JSON bestand...</option>';
+            loadedFiles.forEach((data, name) => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                selector.appendChild(option);
+            });
+            selector.style.display = loadedFiles.size > 1 ? 'block' : 'none';
+        }
+
+        function parseResourceId(resourceId) {
+            if (!resourceId) return null;
+            const parts = resourceId.toLowerCase().split('/');
+            const subIndex = parts.indexOf('subscriptions');
+            const rgIndex = parts.indexOf('resourcegroups');
+            
+            return {
+                subscription: subIndex >= 0 && parts[subIndex + 1] ? parts[subIndex + 1] : null,
+                resourceGroup: rgIndex >= 0 && parts[rgIndex + 1] ? parts[rgIndex + 1] : null
+            };
+        }
+
+        function getAllRecommendations(data) {
+            const all = [];
+            if (data.advisor) all.push(...data.advisor.map(r => ({...r, source: 'advisor'})));
+            if (data.impacted) all.push(...data.impacted.map(r => ({...r, source: 'impacted'})));
+            return all;
+        }
+
+        function filterRecommendations(recommendations) {
+            let filtered = recommendations;
+            
+            if (currentFilter !== 'all') {
+                filtered = filtered.filter(r => r.impact === currentFilter);
+            }
+            
+            if (searchTerm) {
+                const search = searchTerm.toLowerCase();
+                filtered = filtered.filter(r => 
+                    (r.resourceName && r.resourceName.toLowerCase().includes(search)) ||
+                    (r.resourceType && r.resourceType.toLowerCase().includes(search)) ||
+                    (r.description && r.description.toLowerCase().includes(search))
+                );
+            }
+            
+            return filtered;
+        }
+
+        function updateStats(data) {
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            const subscriptions = new Set();
+            const resourceGroups = new Set();
+            const resources = new Set();
+            const resourceTypes = new Set();
+            
+            recommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (parsed && parsed.subscription) {
+                    subscriptions.add(parsed.subscription);
+                    if (parsed.resourceGroup) {
+                        resourceGroups.add(`${parsed.subscription}/${parsed.resourceGroup}`);
+                    }
+                }
+                if (rec.resourceId) resources.add(rec.resourceId);
+                if (rec.resourceType) resourceTypes.add(rec.resourceType.toLowerCase());
+            });
+
+            document.getElementById('totalSubscriptions').textContent = subscriptions.size;
+            document.getElementById('totalResourceGroups').textContent = resourceGroups.size;
+            document.getElementById('totalResourceTypes').textContent = resourceTypes.size;
+            document.getElementById('totalResources').textContent = resources.size;
+            document.getElementById('totalRecommendations').textContent = recommendations.length;
+        }
+
+        function renderSubscriptionsView(data) {
+            const view = document.getElementById('subscriptionsView');
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            // Group by subscription
+            const subMap = new Map();
+            recommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (!parsed || !parsed.subscription) return;
+                
+                if (!subMap.has(parsed.subscription)) {
+                    subMap.set(parsed.subscription, {
+                        name: rec.subscriptionName || parsed.subscription,
+                        id: parsed.subscription,
+                        resourceGroups: new Map()
+                    });
+                }
+                
+                const sub = subMap.get(parsed.subscription);
+                const rgName = parsed.resourceGroup || 'unknown';
+                
+                if (!sub.resourceGroups.has(rgName)) {
+                    sub.resourceGroups.set(rgName, []);
+                }
+                
+                sub.resourceGroups.get(rgName).push(rec);
+            });
+
+            let html = '';
+            subMap.forEach(sub => {
+                const totalRecs = Array.from(sub.resourceGroups.values()).flat().length;
+                html += `
+                    <div class="list-group">
+                        <div class="list-group-header" onclick="toggleGroup(this)">
+                            <span>📊 ${sub.name}</span>
+                            <span class="count">${totalRecs} recommendations</span>
+                        </div>
+                        <div class="list-group-items">
+                `;
+                
+                sub.resourceGroups.forEach((recs, rgName) => {
+                    html += `
+                        <div class="list-group">
+                            <div class="list-group-header" onclick="toggleGroup(this)">
+                                <span>📁 ${rgName}</span>
+                                <span class="count">${recs.length}</span>
+                            </div>
+                            <div class="list-group-items">
+                    `;
+                    
+                    recs.forEach(rec => {
+                        html += `
+                            <div class="list-item">
+                                <div class="list-item-title">
+                                    ${rec.resourceName || 'Unknown'}
+                                    <span class="impact-badge impact-${rec.impact.toLowerCase()}">${rec.impact}</span>
+                                </div>
+                                <div class="list-item-meta">
+                                    ${rec.resourceType || ''}<br>
+                                    ${rec.description || rec.recommendation || ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            view.innerHTML = html || '<div class="placeholder"><h2>Geen subscriptions gevonden</h2></div>';
+        }
+
+        function renderResourceGroupsView(data) {
+            const view = document.getElementById('resourceGroupsView');
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            const rgMap = new Map();
+            recommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (!parsed || !parsed.resourceGroup) return;
+                
+                const key = `${parsed.subscription}/${parsed.resourceGroup}`;
+                if (!rgMap.has(key)) {
+                    rgMap.set(key, {
+                        name: parsed.resourceGroup,
+                        subscription: rec.subscriptionName || parsed.subscription,
+                        resources: []
+                    });
+                }
+                
+                rgMap.get(key).resources.push(rec);
+            });
+
+            let html = '';
+            Array.from(rgMap.values()).sort((a, b) => a.name.localeCompare(b.name)).forEach(rg => {
+                html += `
+                    <div class="list-group">
+                        <div class="list-group-header" onclick="toggleGroup(this)">
+                            <span>📁 ${rg.name} <span style="color: #6c757d; font-weight: normal;">(${rg.subscription})</span></span>
+                            <span class="count">${rg.resources.length}</span>
+                        </div>
+                        <div class="list-group-items">
+                `;
+                
+                rg.resources.forEach(rec => {
+                    html += `
+                        <div class="list-item">
+                            <div class="list-item-title">
+                                ${rec.resourceName || 'Unknown'}
+                                <span class="impact-badge impact-${rec.impact.toLowerCase()}">${rec.impact}</span>
+                            </div>
+                            <div class="list-item-meta">
+                                ${rec.resourceType || ''}<br>
+                                ${rec.description || rec.recommendation || ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            view.innerHTML = html || '<div class="placeholder"><h2>Geen resource groups gevonden</h2></div>';
+        }
+
+        function renderResourceTypesView(data) {
+            const view = document.getElementById('resourceTypesView');
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            const typeMap = new Map();
+            recommendations.forEach(rec => {
+                if (!rec.resourceType) return;
+                const type = rec.resourceType.toLowerCase();
+                
+                if (!typeMap.has(type)) {
+                    typeMap.set(type, []);
+                }
+                
+                typeMap.get(type).push(rec);
+            });
+
+            let html = '';
+            Array.from(typeMap.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([type, recs]) => {
+                html += `
+                    <div class="list-group">
+                        <div class="list-group-header" onclick="toggleGroup(this)">
+                            <span>🔧 ${type}</span>
+                            <span class="count">${recs.length}</span>
+                        </div>
+                        <div class="list-group-items">
+                `;
+                
+                recs.forEach(rec => {
+                    html += `
+                        <div class="list-item">
+                            <div class="list-item-title">
+                                ${rec.resourceName || 'Unknown'}
+                                <span class="impact-badge impact-${rec.impact.toLowerCase()}">${rec.impact}</span>
+                            </div>
+                            <div class="list-item-meta">
+                                ${rec.subscriptionName || ''}<br>
+                                ${rec.description || rec.recommendation || ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            view.innerHTML = html || '<div class="placeholder"><h2>Geen resource types gevonden</h2></div>';
+        }
+
+        function renderResourcesView(data) {
+            const view = document.getElementById('resourcesView');
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            // Group by resource
+            const resourceMap = new Map();
+            recommendations.forEach(rec => {
+                const key = rec.resourceId || rec.resourceName || 'unknown';
+                
+                if (!resourceMap.has(key)) {
+                    resourceMap.set(key, {
+                        name: rec.resourceName || 'Unknown',
+                        type: rec.resourceType,
+                        subscription: rec.subscriptionName,
+                        id: rec.resourceId,
+                        recommendations: []
+                    });
+                }
+                
+                resourceMap.get(key).recommendations.push(rec);
+            });
+
+            let html = '';
+            
+            // Sort resources alphabetically
+            Array.from(resourceMap.values()).sort((a, b) => a.name.localeCompare(b.name)).forEach(resource => {
+                // Determine highest impact for badge
+                const impacts = resource.recommendations.map(r => r.impact);
+                const highestImpact = impacts.includes('High') ? 'High' : 
+                                     impacts.includes('Medium') ? 'Medium' : 'Low';
+                
+                html += `
+                    <div class="list-group">
+                        <div class="list-group-header" onclick="toggleGroup(this)">
+                            <span>💾 ${resource.name} <span style="color: #6c757d; font-weight: normal;">(${resource.type || 'Unknown type'})</span></span>
+                            <span class="count">${resource.recommendations.length} recommendations</span>
+                        </div>
+                        <div class="list-group-items">
+                `;
+                
+                resource.recommendations.forEach(rec => {
+                    html += `
+                        <div class="list-item">
+                            <div class="list-item-title">
+                                ${rec.description || rec.recommendation || 'No description'}
+                                <span class="impact-badge impact-${rec.impact.toLowerCase()}">${rec.impact}</span>
+                            </div>
+                            <div class="list-item-meta">
+                                ${rec.category || ''} | ${resource.subscription || ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            view.innerHTML = html || '<div class="placeholder"><h2>Geen resources gevonden</h2></div>';
+        }
+
+        function renderRecommendationsView(data) {
+            const view = document.getElementById('recommendationsView');
+            let recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            // Sort by impact: High → Medium → Low
+            const impactOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
+            recommendations.sort((a, b) => {
+                const orderA = impactOrder[a.impact] ?? 999;
+                const orderB = impactOrder[b.impact] ?? 999;
+                return orderA - orderB;
+            });
+
+            let html = '';
+            let currentImpact = null;
+            
+            recommendations.forEach(rec => {
+                if (rec.impact !== currentImpact) {
+                    if (currentImpact !== null) {
+                        html += '</div></div>';
+                    }
+                    currentImpact = rec.impact;
+                    const count = recommendations.filter(r => r.impact === currentImpact).length;
+                    html += `
+                        <div class="list-group">
+                            <div class="list-group-header" onclick="toggleGroup(this)">
+                                <span>⚠️ ${currentImpact} Impact</span>
+                                <span class="count">${count}</span>
+                            </div>
+                            <div class="list-group-items">
+                    `;
+                }
+                
+                html += `
+                    <div class="list-item">
+                        <div class="list-item-title">
+                            ${rec.description || rec.recommendation || 'No description'}
+                        </div>
+                        <div class="list-item-meta">
+                            ${rec.resourceName || ''} | ${rec.resourceType || ''}<br>
+                            ${rec.category || ''} | ${rec.subscriptionName || ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (currentImpact !== null) {
+                html += '</div></div>';
+            }
+            
+            view.innerHTML = html || '<div class="placeholder"><h2>Geen recommendations gevonden</h2></div>';
+        }
+
+        function renderGraphView(data) {
+            const container = document.getElementById('graphView');
+            const recommendations = filterRecommendations(getAllRecommendations(data));
+            
+            // Build VM lookup map
+            const vmMap = new Map();
+            if (data.virtualMachines) {
+                data.virtualMachines.forEach(vm => {
+                    const cleanName = vm.resourceName ? vm.resourceName.replace(/"/g, '') : null;
+                    const cleanId = vm.resourceId ? vm.resourceId.replace(/"/g, '') : null;
+                    if (cleanName) vmMap.set(cleanName.toLowerCase(), vm);
+                    if (cleanId) vmMap.set(cleanId.toLowerCase(), vm);
+                });
+            }
+            
+            // Build hierarchy
+            const hierarchy = {
+                name: "Azure",
+                type: "root",
+                children: []
+            };
+
+            const subscriptions = new Map();
+
+            recommendations.forEach(rec => {
+                const parsed = parseResourceId(rec.resourceId);
+                if (!parsed || !parsed.subscription) return;
+
+                const subId = parsed.subscription;
+                const rgName = parsed.resourceGroup || 'unknown';
+                const resourceName = rec.resourceName || 'unknown';
+
+                if (!subscriptions.has(subId)) {
+                    subscriptions.set(subId, {
+                        name: rec.subscriptionName || subId,
+                        id: subId,
+                        type: 'subscription',
+                        resourceGroups: new Map()
+                    });
+                }
+
+                const sub = subscriptions.get(subId);
+
+                if (!sub.resourceGroups.has(rgName)) {
+                    sub.resourceGroups.set(rgName, {
+                        name: rgName,
+                        type: 'resourceGroup',
+                        resources: new Map()
+                    });
+                }
+
+                const rg = sub.resourceGroups.get(rgName);
+
+                if (!rg.resources.has(resourceName)) {
+                    // Check if this is a VM and get metadata
+                    const vmData = vmMap.get(resourceName.toLowerCase()) || 
+                                  vmMap.get(rec.resourceId?.toLowerCase());
+                    
+                    rg.resources.set(resourceName, {
+                        name: resourceName,
+                        type: 'resource',
+                        resourceType: rec.resourceType,
+                        resourceId: rec.resourceId,
+                        vmMetadata: vmData,
+                        recommendations: []
+                    });
+                }
+
+                const resource = rg.resources.get(resourceName);
+
+                resource.recommendations.push({
+                    name: rec.description || rec.recommendation || 'No description',
+                    type: 'recommendation',
+                    impact: rec.impact,
+                    category: rec.category,
+                    recommendationId: rec.recommendationId,
+                    description: rec.description
+                });
+            });
+
+            subscriptions.forEach(sub => {
+                const subNode = {
+                    name: sub.name,
+                    type: 'subscription',
+                    children: []
+                };
+
+                sub.resourceGroups.forEach(rg => {
+                    const rgNode = {
+                        name: rg.name,
+                        type: 'resourceGroup',
+                        children: []
+                    };
+
+                    rg.resources.forEach(resource => {
+                        const resourceNode = {
+                            name: resource.name,
+                            type: 'resource',
+                            resourceType: resource.resourceType,
+                            resourceId: resource.resourceId,
+                            vmMetadata: resource.vmMetadata,
+                            children: resource.recommendations.map(rec => ({
+                                ...rec,
+                                type: 'recommendation'
+                            }))
+                        };
+
+                        if (resourceNode.children.length > 0) {
+                            rgNode.children.push(resourceNode);
+                        }
+                    });
+
+                    if (rgNode.children.length > 0) {
+                        subNode.children.push(rgNode);
+                    }
+                });
+
+                if (subNode.children.length > 0) {
+                    hierarchy.children.push(subNode);
+                }
+            });
+
+            drawGraph(container, hierarchy);
+        }
+
+        function drawGraph(container, hierarchyData) {
+            container.innerHTML = '<svg id="graph"></svg>';
+            
+            const width = container.clientWidth - 40;
+            
+            const countNodes = (node) => {
+                let count = 1;
+                if (node.children) {
+                    node.children.forEach(child => count += countNodes(child));
+                }
+                return count;
+            };
+            
+            const totalNodes = countNodes(hierarchyData);
+            const minHeight = 500;
+            const nodeHeight = 25;
+            const height = Math.max(minHeight, totalNodes * nodeHeight);
+
+            const svg = d3.select('#graph')
+                .attr('width', width)
+                .attr('height', height);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(100, 50)`);
+
+            const tree = d3.tree()
+                .size([height - 100, width - 350])
+                .separation((a, b) => (a.parent === b.parent ? 0.7 : 0.9));
+
+            const root = d3.hierarchy(hierarchyData);
+            root.x0 = 50;
+            root.y0 = 0;
+
+            let i = 0;
+
+            if (root.children) {
+                root.children.forEach(collapse);
+            }
+
+            update(root);
+
+            function collapse(d) {
+                if (d.children) {
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                    d.children = null;
+                }
+            }
+
+            function update(source) {
+                const treeData = tree(root);
+                const nodes = treeData.descendants();
+                const links = treeData.descendants().slice(1);
+
+                nodes.forEach(d => d.y = d.depth * 180);
+
+                const node = g.selectAll('g.node')
+                    .data(nodes, d => d.id || (d.id = ++i));
+
+                const nodeEnter = node.enter().append('g')
+                    .attr('class', 'node')
+                    .attr('transform', d => `translate(${source.y0},${source.x0})`)
+                    .on('click', click)
+                    .on('mouseover', showTooltip)
+                    .on('mouseout', hideTooltip);
+
+                nodeEnter.append('circle')
+                    .attr('r', 6)
+                    .style('fill', d => getNodeColor(d.data))
+                    .style('stroke', '#333');
+
+                nodeEnter.append('text')
+                    .attr('dy', '.35em')
+                    .attr('x', d => d.children || d._children ? -10 : 10)
+                    .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+                    .style('font-size', '13px')
+                    .text(d => {
+                        const maxLength = 45;
+                        return d.data.name.length > maxLength ? 
+                            d.data.name.substring(0, maxLength) + '...' : 
+                            d.data.name;
+                    });
+
+                const nodeUpdate = nodeEnter.merge(node);
+
+                nodeUpdate.transition()
+                    .duration(750)
+                    .attr('transform', d => `translate(${d.y},${d.x})`);
+
+                nodeUpdate.select('circle')
+                    .style('fill', d => getNodeColor(d.data))
+                    .attr('r', 6);
+
+                const nodeExit = node.exit().transition()
+                    .duration(750)
+                    .attr('transform', d => `translate(${source.y},${source.x})`)
+                    .remove();
+
+                nodeExit.select('circle')
+                    .attr('r', 1e-6);
+
+                nodeExit.select('text')
+                    .style('fill-opacity', 1e-6);
+
+                const link = g.selectAll('path.link')
+                    .data(links, d => d.id);
+
+                const linkEnter = link.enter().insert('path', 'g')
+                    .attr('class', 'link')
+                    .attr('d', d => {
+                        const o = {x: source.x0, y: source.y0};
+                        return diagonal(o, o);
+                    });
+
+                const linkUpdate = linkEnter.merge(link);
+
+                linkUpdate.transition()
+                    .duration(750)
+                    .attr('d', d => diagonal(d, d.parent));
+
+                link.exit().transition()
+                    .duration(750)
+                    .attr('d', d => {
+                        const o = {x: source.x, y: source.y};
+                        return diagonal(o, o);
+                    })
+                    .remove();
+
+                nodes.forEach(d => {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+
+                function diagonal(s, d) {
+                    return `M ${s.y} ${s.x}
+                            C ${(s.y + d.y) / 2} ${s.x},
+                              ${(s.y + d.y) / 2} ${d.x},
+                              ${d.y} ${d.x}`;
+                }
+
+                function click(event, d) {
+                    if (d.children) {
+                        d._children = d.children;
+                        d.children = null;
+                    } else {
+                        d.children = d._children;
+                        d._children = null;
+                    }
+                    update(d);
+                }
+            }
+        }
+
+        function getNodeColor(data) {
+            switch(data.type) {
+                case 'subscription': return '#0078d4';
+                case 'resourceGroup': return '#00bcf2';
+                case 'resource': return '#50e6ff';
+                case 'recommendation':
+                    if (data.impact === 'High') return '#dc3545';
+                    if (data.impact === 'Medium') return '#ffc107';
+                    if (data.impact === 'Low') return '#28a745';
+                    return '#6c757d';
+                default: return '#6c757d';
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById('tooltip');
+            const data = d.data;
+            
+            let content = `<div class="tooltip-title">${data.name}</div>`;
+            
+            if (data.type === 'recommendation') {
+                content += `<div style="margin-top: 8px;">Impact: <span class="impact-badge impact-${data.impact.toLowerCase()}">${data.impact}</span></div>`;
+                if (data.category) content += `<div>Category: ${data.category}</div>`;
+                if (data.description) content += `<div style="margin-top: 8px;">${data.description}</div>`;
+            } else if (data.type === 'resource') {
+                if (data.resourceType) {
+                    content += `<div style="margin-top: 8px; font-weight: 600;">Type: ${data.resourceType}</div>`;
+                }
+                
+                // Show VM metadata if available
+                if (data.vmMetadata) {
+                    const vm = data.vmMetadata;
+                    content += `<div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px;">`;
+                    
+                    if (vm.sku) {
+                        content += `<div>💻 SKU: ${vm.sku}</div>`;
+                    }
+                    if (vm.osType) {
+                        content += `<div>🖥️ OS: ${vm.osType}</div>`;
+                    }
+                    if (vm.location) {
+                        const location = vm.location.replace(/"/g, '');
+                        content += `<div>📍 Location: ${location}</div>`;
+                    }
+                    if (vm.imagePublisher || vm.imageOffer) {
+                        const publisher = vm.imagePublisher ? vm.imagePublisher.replace(/"/g, '') : '';
+                        const offer = vm.imageOffer ? vm.imageOffer.replace(/"/g, '') : '';
+                        if (publisher || offer) {
+                            content += `<div>📀 Image: ${publisher} ${offer}</div>`;
+                        }
+                    }
+                    if (vm.availabilitySet !== undefined) {
+                        const hasAS = vm.availabilitySet === 'true' || vm.availabilitySet === true;
+                        content += `<div>🔄 Availability Set: ${hasAS ? '✅ Yes' : '❌ No'}</div>`;
+                    }
+                    if (vm.encryptionAtHost !== undefined) {
+                        const encrypted = vm.encryptionAtHost === 'true' || vm.encryptionAtHost === true;
+                        content += `<div>🔒 Encryption at Host: ${encrypted ? '✅ Yes' : '❌ No'}</div>`;
+                    }
+                    if (vm.adeEnabled !== undefined) {
+                        const ade = vm.adeEnabled === 'true' || vm.adeEnabled === true;
+                        content += `<div>🔐 ADE: ${ade ? '✅ Enabled' : '❌ Disabled'}</div>`;
+                    }
+                    
+                    content += `</div>`;
+                }
+            }
+            
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.pageX + 15) + 'px';
+            tooltip.style.top = (event.pageY - 15) + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').style.display = 'none';
+        }
+
+        function toggleGroup(header) {
+            const items = header.nextElementSibling;
+            if (items && items.classList.contains('list-group-items')) {
+                items.classList.toggle('expanded');
+            }
+        }
+
+        function switchView(view) {
+            currentView = view;
+            
+            // Update tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.view === view);
+            });
+            
+            // Update stat cards
+            document.querySelectorAll('.stat-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.view === view);
+            });
+            
+            // Hide all views
+            document.querySelectorAll('.graph-view, .list-view').forEach(v => {
+                v.classList.remove('active');
+            });
+            
+            // Show selected view
+            if (!rawData) return;
+            
+            switch(view) {
+                case 'graph':
+                    document.getElementById('graphView').classList.add('active');
+                    renderGraphView(rawData);
+                    break;
+                case 'subscriptions':
+                    document.getElementById('subscriptionsView').classList.add('active');
+                    renderSubscriptionsView(rawData);
+                    break;
+                case 'resourcegroups':
+                    document.getElementById('resourceGroupsView').classList.add('active');
+                    renderResourceGroupsView(rawData);
+                    break;
+                case 'resourcetypes':
+                    document.getElementById('resourceTypesView').classList.add('active');
+                    renderResourceTypesView(rawData);
+                    break;
+                case 'resources':
+                    document.getElementById('resourcesView').classList.add('active');
+                    renderResourcesView(rawData);
+                    break;
+                case 'recommendations':
+                    document.getElementById('recommendationsView').classList.add('active');
+                    renderRecommendationsView(rawData);
+                    break;
+            }
+        }
+
+        function refresh() {
+            if (!rawData) return;
+            updateStats(rawData);
+            switchView(currentView);
+        }
+
+        function loadAzureData(data, fileName) {
+            rawData = data;
+            document.getElementById('jsonSelector').value = fileName;
+            refresh();
+            console.log('✓ Data geladen!');
+        }
+
+        // Event listeners
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.impact;
+                refresh();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchTerm = e.target.value;
+            refresh();
+        });
+
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                switchView(tab.dataset.view);
+            });
+        });
+
+        document.querySelectorAll('.stat-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const view = card.dataset.view;
+                if (view) switchView(view);
+            });
+        });
+    </script>
+</body>
+</html>
