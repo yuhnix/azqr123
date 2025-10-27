@@ -4,6 +4,8 @@
 package vm
 
 import (
+	"strings"
+
 	"github.com/Azure/azqr/internal/models"
 	"github.com/Azure/azqr/internal/throttling"
 	"github.com/Azure/azqr/internal/to"
@@ -16,39 +18,29 @@ func init() {
 
 // VirtualMachineScanner - Scanner for Virtual Machines
 type VirtualMachineScanner struct {
-	config    *models.ScannerConfig
-	client    *armcompute.VirtualMachinesClient
-	VMResults []VMResult // Store VM details for Excel export
-}
-
-// VMResult represents detailed VM properties for Excel export
-type VMResult struct {
-	SubscriptionID   string
-	ResourceName     string
-	ResourceID       string
-	ResourceGroup    string
-	Location         string
-	OsType           string
-	ImagePublisher   string
-	ImageOffer       string
-	ImagePlan        string
-	SKU              string
-	IsSQLVM          bool
-	PublicIP         string
-	AvailabilitySet  bool
-	EncryptionAtHost bool
-	ADEEnabled       bool
-	ADEProvisioning  string
-	DiskSSEType      string
+	config      *models.ScannerConfig
+	client      *armcompute.VirtualMachinesClient
+	disksClient *armcompute.DisksClient
+	VMResults   []models.VMResult // Nu uit models package
 }
 
 // Init - Initializes the VirtualMachineScanner
 func (c *VirtualMachineScanner) Init(config *models.ScannerConfig) error {
 	c.config = config
-	c.VMResults = make([]VMResult, 0) // Initialize the slice
+	c.VMResults = make([]models.VMResult, 0)
+
 	var err error
 	c.client, err = armcompute.NewVirtualMachinesClient(config.SubscriptionID, config.Cred, config.ClientOptions)
-	return err
+	if err != nil {
+		return err
+	}
+
+	c.disksClient, err = armcompute.NewDisksClient(config.SubscriptionID, config.Cred, config.ClientOptions)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Scan - Scans all Virtual Machines in a Resource Group
@@ -58,6 +50,22 @@ func (c *VirtualMachineScanner) Scan(scanContext *models.ScanContext) ([]models.
 	vms, err := c.list()
 	if err != nil {
 		return nil, err
+	}
+
+	// Collect detailed VM info (including disk encryption) for all VMs
+	vmDetailsMap := make(map[string]*models.VMResult)
+	for _, vm := range vms {
+		vmDetails := c.extractVMDetails(vm)
+		vmDetailsMap[*vm.ID] = &vmDetails
+		c.VMResults = append(c.VMResults, vmDetails)
+	}
+
+	// Add VM details to scan context so recommendations can access it
+	if scanContext.VMDetails == nil {
+		scanContext.VMDetails = make(map[string]*models.VMResult)
+	}
+	for k, v := range vmDetailsMap {
+		scanContext.VMDetails[k] = v
 	}
 
 	engine := models.RecommendationEngine{}
@@ -78,29 +86,22 @@ func (c *VirtualMachineScanner) Scan(scanContext *models.ScanContext) ([]models.
 			Location:         *vm.Location,
 			Recommendations:  rr,
 		})
-
-		// Extract detailed VM properties for Excel export
-		vmResult := c.extractVMDetails(vm)
-		c.VMResults = append(c.VMResults, vmResult)
 	}
 
 	return results, nil
 }
 
-// extractVMDetails extracts detailed VM properties
-func (c *VirtualMachineScanner) extractVMDetails(vm *armcompute.VirtualMachine) VMResult {
-	result := VMResult{
+// extractVMDetails extracts detailed VM properties including disk encryption
+func (c *VirtualMachineScanner) extractVMDetails(vm *armcompute.VirtualMachine) models.VMResult {
+	result := models.VMResult{
 		SubscriptionID: c.config.SubscriptionID,
 		ResourceName:   to.String(vm.Name),
+		ResourceID:     to.String(vm.ID),
 		ResourceGroup:  models.GetResourceGroupFromResourceID(*vm.ID),
 		Location:       to.String(vm.Location),
 	}
 
 	if vm.Properties != nil {
-
-		// Extract Resource ID
-		result.ResourceID = to.String(vm.ID)
-
 		// Extract OS type
 		if vm.Properties.StorageProfile != nil && vm.Properties.StorageProfile.OSDisk != nil && vm.Properties.StorageProfile.OSDisk.OSType != nil {
 			result.OsType = string(*vm.Properties.StorageProfile.OSDisk.OSType)
@@ -126,28 +127,61 @@ func (c *VirtualMachineScanner) extractVMDetails(vm *armcompute.VirtualMachine) 
 			result.EncryptionAtHost = *vm.Properties.SecurityProfile.EncryptionAtHost
 		}
 
-		// Check for SQL VM (based on image publisher/offer)
+		// Check for SQL VM
 		if result.ImagePublisher == "MicrosoftSQLServer" {
 			result.IsSQLVM = true
 		}
 
-		// Extract public IP information (requires network interface lookup)
-		// Note: This would require additional API calls to get network interface details
-		// For now, leaving empty - can be enhanced later
-		result.PublicIP = ""
+		// Extract disk encryption information
+		if vm.Properties.StorageProfile != nil &&
+			vm.Properties.StorageProfile.OSDisk != nil &&
+			vm.Properties.StorageProfile.OSDisk.ManagedDisk != nil &&
+			vm.Properties.StorageProfile.OSDisk.ManagedDisk.ID != nil {
 
-		// Extract Azure Disk Encryption (ADE) information
-		// This would require checking disk encryption settings
-		// For now, setting defaults - can be enhanced later
-		result.ADEEnabled = false
-		result.ADEProvisioning = ""
-		result.DiskSSEType = ""
+			diskID := *vm.Properties.StorageProfile.OSDisk.ManagedDisk.ID
+			parts := strings.Split(diskID, "/")
+			diskName := parts[len(parts)-1]
+
+			// Extract resource group from disk ID
+			rg := ""
+			for i, part := range parts {
+				if strings.EqualFold(part, "resourceGroups") && i+1 < len(parts) {
+					rg = parts[i+1]
+					break
+				}
+			}
+
+			if rg != "" {
+				<-throttling.ARMLimiter
+				disk, err := c.disksClient.Get(c.config.Ctx, rg, diskName, nil)
+				if err == nil && disk.Properties != nil {
+					// Check for SSE encryption type
+					if disk.Properties.Encryption != nil && disk.Properties.Encryption.Type != nil {
+						result.DiskSSEType = string(*disk.Properties.Encryption.Type)
+					}
+
+					// Check for ADE (Azure Disk Encryption)
+					if disk.Properties.EncryptionSettingsCollection != nil &&
+						disk.Properties.EncryptionSettingsCollection.Enabled != nil {
+						result.ADEEnabled = *disk.Properties.EncryptionSettingsCollection.Enabled
+
+						// Get provisioning state if available
+						if disk.Properties.ProvisioningState != nil {
+							result.ADEProvisioning = *disk.Properties.ProvisioningState
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Extract plan information from VM plan (not properties)
 	if vm.Plan != nil {
 		result.ImagePlan = to.String(vm.Plan.Name)
 	}
+
+	// Public IP would require network interface lookup - leaving empty for now
+	result.PublicIP = ""
 
 	return result
 }
@@ -158,7 +192,6 @@ func (c *VirtualMachineScanner) list() ([]*armcompute.VirtualMachine, error) {
 
 	vms := make([]*armcompute.VirtualMachine, 0)
 	for pager.More() {
-		// Wait for a token from the burstLimiter channel before making the request
 		<-throttling.ARMLimiter
 		resp, err := pager.NextPage(c.config.Ctx)
 		if err != nil {
@@ -175,6 +208,6 @@ func (c *VirtualMachineScanner) ResourceTypes() []string {
 }
 
 // GetVMResults returns the collected VM details for Excel export
-func (c *VirtualMachineScanner) GetVMResults() []VMResult {
+func (c *VirtualMachineScanner) GetVMResults() []models.VMResult {
 	return c.VMResults
 }

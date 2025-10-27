@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azqr/internal/models"
-	"github.com/Azure/azqr/internal/scanners/vm"
 )
 
 type (
@@ -27,7 +26,7 @@ type (
 		Resources               []*models.Resource
 		ExludedResources        []*models.Resource
 		ResourceTypeCount       []models.ResourceTypeCount
-		VirtualMachines         []vm.VMResult
+		VirtualMachines         []models.VMResult
 	}
 
 	ResourceTypeCountResults struct {

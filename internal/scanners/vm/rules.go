@@ -83,11 +83,16 @@ func (a *VirtualMachineScanner) GetRecommendations() map[string]models.AzqrRecom
 			Eval: func(target interface{}, scanContext *models.ScanContext) (bool, string) {
 				v := target.(*armcompute.VirtualMachine)
 
-				isADEEnabled := false
-				if v.Properties != nil && v.Properties.DiagnosticsProfile != nil && v.Properties.DiagnosticsProfile.BootDiagnostics != nil && v.Properties.DiagnosticsProfile.BootDiagnostics.Enabled != nil {
-					isADEEnabled = *v.Properties.DiagnosticsProfile.BootDiagnostics.Enabled
+				// Check if we have VM details for this VM
+				if scanContext.VMDetails != nil {
+					if vmDetails, exists := scanContext.VMDetails[*v.ID]; exists {
+						// Return the ADE status from VMResult
+						return !vmDetails.ADEEnabled, vmDetails.DiskSSEType
+					}
 				}
-				return !isADEEnabled, ""
+
+				// If we couldn't determine, fail the check
+				return true, "Unable to determine ADE status"
 			},
 			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/virtual-machines/azure-disk-encryption-overview",
 		},

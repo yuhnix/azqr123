@@ -39,6 +39,7 @@ type (
 		PublicIPs             map[string]*armnetwork.PublicIPAddress
 		SiteConfig            *armappservice.WebAppsClientGetConfigurationResponse
 		BlobServiceProperties *armstorage.BlobServicesClientGetServicePropertiesResponse
+		VMDetails             map[string]*VMResult
 	}
 
 	// IAzureScanner - Interface for all Azure Scanners
@@ -208,6 +209,26 @@ type (
 		DPSStatus        string
 		TELStatus        string
 		DefenderStatus   string
+	}
+
+	VMResult struct {
+		SubscriptionID   string
+		ResourceName     string
+		ResourceID       string
+		ResourceGroup    string
+		Location         string
+		OsType           string
+		ImagePublisher   string
+		ImageOffer       string
+		ImagePlan        string
+		SKU              string
+		IsSQLVM          bool
+		PublicIP         string
+		AvailabilitySet  bool
+		EncryptionAtHost bool
+		ADEEnabled       bool
+		ADEProvisioning  string
+		DiskSSEType      string
 	}
 
 	RecommendationEngine struct{}
