@@ -25,6 +25,7 @@ type VirtualMachineScanner struct {
 type VMResult struct {
 	SubscriptionID   string
 	ResourceName     string
+	ResourceID       string
 	ResourceGroup    string
 	Location         string
 	OsType           string
@@ -96,6 +97,10 @@ func (c *VirtualMachineScanner) extractVMDetails(vm *armcompute.VirtualMachine) 
 	}
 
 	if vm.Properties != nil {
+
+		// Extract Resource ID
+		result.ResourceID = to.String(vm.ID)
+
 		// Extract OS type
 		if vm.Properties.StorageProfile != nil && vm.Properties.StorageProfile.OSDisk != nil && vm.Properties.StorageProfile.OSDisk.OSType != nil {
 			result.OsType = string(*vm.Properties.StorageProfile.OSDisk.OSType)

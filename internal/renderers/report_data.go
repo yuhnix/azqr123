@@ -310,13 +310,14 @@ func (rd *ReportData) ResourceTypesTable() [][]string {
 }
 
 func (rd *ReportData) VirtualMachinesTable() [][]string {
-	headers := []string{"Subscription Id", "Resource Name", "Resource Group", "Location", "OS Type", "Image Publisher", "Image Offer", "Image Plan", "SKU", "Is SQL VM", "Has Public IP", "AvailabilitySet", "Encryption At Host", "ADE Enabled", "ADE Provisioning State", "Disk SSE Type"}
+	headers := []string{"Subscription Id", "Resource Name", "Resource Group", "Resource Id", "Location", "OS Type", "Image Publisher", "Image Offer", "Image Plan", "SKU", "Is SQL VM", "Has Public IP", "AvailabilitySet", "Encryption At Host", "ADE Enabled", "ADE Provisioning State", "Disk SSE Type"}
 	rows := [][]string{}
 	for _, d := range rd.VirtualMachines {
 		row := []string{
 			MaskSubscriptionID(d.SubscriptionID, rd.Mask),
 			d.ResourceName,
 			d.ResourceGroup,
+			d.ResourceID,
 			d.Location,
 			d.OsType,
 			d.ImagePublisher,

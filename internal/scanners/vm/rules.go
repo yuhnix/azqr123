@@ -60,5 +60,36 @@ func (a *VirtualMachineScanner) GetRecommendations() map[string]models.AzqrRecom
 			},
 			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-resources?tabs=json",
 		},
+		"vm-008": {
+			RecommendationID: "vm-008",
+			ResourceType:     "Microsoft.Compute/virtualMachines",
+			Category:         models.CategorySecurity,
+			Recommendation:   "Virtual Machine should have disk encryption at host enabled",
+			Impact:           models.ImpactHigh,
+			Eval: func(target interface{}, scanContext *models.ScanContext) (bool, string) {
+				v := target.(*armcompute.VirtualMachine)
+				isDiskEncryptionEnabled := v.Properties.SecurityProfile != nil && v.Properties.SecurityProfile.EncryptionAtHost != nil && *v.Properties.SecurityProfile.EncryptionAtHost
+				return !isDiskEncryptionEnabled, ""
+			},
+			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/security-center/security-center-disk-encryption",
+		},
+		// find disks with azure disk encryption set
+		"vm-009": {
+			RecommendationID: "vm-009",
+			ResourceType:     "Microsoft.Compute/virtualMachines",
+			Category:         models.CategorySecurity,
+			Recommendation:   "Virtual Machine has Azure Disk Encryption (ADE) enabled",
+			Impact:           models.ImpactHigh,
+			Eval: func(target interface{}, scanContext *models.ScanContext) (bool, string) {
+				v := target.(*armcompute.VirtualMachine)
+
+				isADEEnabled := false
+				if v.Properties != nil && v.Properties.DiagnosticsProfile != nil && v.Properties.DiagnosticsProfile.BootDiagnostics != nil && v.Properties.DiagnosticsProfile.BootDiagnostics.Enabled != nil {
+					isADEEnabled = *v.Properties.DiagnosticsProfile.BootDiagnostics.Enabled
+				}
+				return !isADEEnabled, ""
+			},
+			LearnMoreUrl: "https://learn.microsoft.com/en-us/azure/virtual-machines/azure-disk-encryption-overview",
+		},
 	}
 }
